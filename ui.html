@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Movie Finder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0708;
+    --curtain: #7a0f1a;
+    --curtain-dark: #3d050c;
+    --screen: #f4efe4;
+    --screen-text: #1d1a17;
+    --muted: #6f675d;
+    --gold: #d9a441;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(ellipse at 50% 30%, #2a1416 0%, var(--bg) 70%);
+    color: var(--screen-text);
+    font-family: "Inter", system-ui, sans-serif;
+    overflow-x: hidden;
+  }
+  /* Velvet curtains on each side; the theater sits exactly between them */
+  .curtain {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    width: var(--curtain-w);
+    background: repeating-linear-gradient(90deg, var(--curtain-dark) 0 14px, var(--curtain) 22px 34px, var(--curtain-dark) 48px);
+    box-shadow: inset 0 -40px 60px rgba(0,0,0,.6);
+    z-index: 3;
+  }
+  :root { --curtain-w: 9vw; --valance-h: 46px; --seats-h: 84px; }
+  .curtain.left { left: 0; border-radius: 0 0 60% 0; }
+  .curtain.right { right: 0; border-radius: 0 0 0 60%; }
+  .valance {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--valance-h);
+    background: repeating-linear-gradient(90deg, var(--curtain-dark) 0 10px, var(--curtain) 18px 30px, var(--curtain-dark) 40px);
+    border-bottom: 3px solid var(--gold);
+    z-index: 4;
+  }
+  .theater {
+    position: relative;
+    z-index: 2;
+    min-height: 100vh;
+    margin: 0 calc(var(--curtain-w) + 12px);
+    padding-top: calc(var(--valance-h) + 14px);
+    display: flex;
+    flex-direction: column;
+  }
+  .marquee {
+    text-align: center;
+    font-family: "Bebas Neue", sans-serif;
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    line-height: 1;
+    letter-spacing: .12em;
+    color: var(--gold);
+    text-shadow: 0 0 18px rgba(217,164,65,.45);
+    margin: 0 0 14px;
+  }
+  /* The screen: off-white with a soft projector glow and a black masking frame.
+     It grows to fill all space down to the seats, so there's no empty band. */
+  .screen {
+    flex: 1;
+    background: var(--screen);
+    border: 14px solid #050505;
+    border-radius: 6px;
+    box-shadow: 0 0 0 2px #2b2b2b, 0 0 80px 10px rgba(244,239,228,.18), 0 30px 60px rgba(0,0,0,.7);
+    padding: clamp(16px, 4vw, 40px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+  .screen.has-results { justify-content: flex-start; }
+  form { width: min(560px, 100%); display: flex; gap: 8px; }
+  input {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    font-size: 1.05rem;
+    padding: 14px 18px;
+    border: 2px solid #1d1a17;
+    border-radius: 999px;
+    background: #fff;
+    color: var(--screen-text);
+    outline: none;
+  }
+  input:focus { box-shadow: 0 0 0 4px rgba(217,164,65,.45); }
+  button {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 1.2rem;
+    letter-spacing: .08em;
+    padding: 0 22px;
+    border: none;
+    border-radius: 999px;
+    background: #1d1a17;
+    color: var(--screen);
+    cursor: pointer;
+  }
+  button:hover { background: var(--curtain); }
+  .hint { color: var(--muted); font-size: .9rem; margin: 12px 0 0; text-align: center; }
+  .results { width: 100%; margin-top: 24px; display: grid; gap: 14px; }
+  .result { border-top: 1px solid #d8d0c2; padding-top: 12px; }
+  .result h3 { margin: 0; font-family: "Bebas Neue", sans-serif; font-size: 1.5rem; letter-spacing: .04em; font-weight: 400; }
+  .meta { color: var(--muted); font-size: .82rem; margin: 2px 0 6px; }
+  .badge { display: inline-block; font-size: .7rem; padding: 1px 8px; border-radius: 999px; background: #1d1a17; color: var(--screen); margin-left: 6px; vertical-align: middle; }
+  .result p { margin: 0; font-size: .93rem; line-height: 1.45; }
+  .seats {
+    position: sticky;
+    bottom: 0;
+    height: var(--seats-h);
+    margin: 0 calc(-1 * var(--curtain-w) - 12px);
+    background:
+      radial-gradient(ellipse 30px 34px at 32px 46px, #160a0b 97%, transparent) 26px 34px / 64px 50px repeat-x,
+      radial-gradient(ellipse 28px 30px at 32px 40px, #2a1214 97%, transparent) 0 0 / 64px 50px repeat-x,
+      linear-gradient(transparent 55%, #080405 55%);
+    z-index: 2;
+  }
+  @media (max-width: 600px) {
+    :root { --curtain-w: 5vw; --seats-h: 60px; }
+    .theater { margin: 0 16px; }
+    .seats { margin: 0 -16px; }
+    .screen { border-width: 8px; }
+    button { padding: 0 14px; }
+  }
+</style>
+</head>
+<body>
+  <div class="valance"></div>
+  <div class="curtain left"></div>
+  <div class="curtain right"></div>
+
+  <main class="theater">
+    <h1 class="marquee">Now Searching</h1>
+    <section class="screen" id="screen">
+      <form id="form">
+        <input id="q" type="search" placeholder="Describe the movie you're in the mood for..." autocomplete="off" autofocus>
+        <button type="submit">Search</button>
+      </form>
+      <p class="hint" id="hint">Try: "kids with spells and wands learn sorcery at an academy"</p>
+      <div class="results" id="results"></div>
+    </section>
+    <div class="seats" aria-hidden="true"></div>
+  </main>
+
+<script>
+  const form = document.getElementById("form");
+  const input = document.getElementById("q");
+  const screen = document.getElementById("screen");
+  const hint = document.getElementById("hint");
+  const resultsEl = document.getElementById("results");
+
+  const escape = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const shorten = (s, n) => s.length > n ? s.slice(0, n).replace(/\s+\S*$/, "") + "..." : s;
+
+  form.addEventListener("submit", async e => {
+    e.preventDefault();
+    const q = input.value.trim();
+    if (!q) return;
+    hint.textContent = "Rolling film...";
+    try {
+      const res = await fetch("/search?q=" + encodeURIComponent(q));
+      const results = await res.json();
+      hint.textContent = results.length ? "" : "No matches. Try describing it differently.";
+      screen.classList.toggle("has-results", results.length > 0);
+      resultsEl.innerHTML = results.map(r => `
+        <article class="result">
+          <h3>${escape(r.title)}<span class="badge">${escape(r.source || "Netflix")}</span></h3>
+          <div class="meta">${escape(r.type)}${r.year ? " · " + r.year : ""}${r.genres ? " · " + escape(r.genres) : ""}</div>
+          <p>${escape(shorten(r.passage, 320))}</p>
+        </article>`).join("");
+    } catch {
+      hint.textContent = "Couldn't reach the search server. Is web.py running?";
+    }
+  });
+</script>
+</body>
+</html>

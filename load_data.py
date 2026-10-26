@@ -40,6 +40,8 @@ def main():
                     "genres": row.listed_in,
                     "rating": row.rating,
                     "year": int(row.release_year),
+                    "source": "Netflix",
+                    "movie_id": row.show_id,
                 }
                 for row in batch.itertuples()
             ],

@@ -1,6 +1,6 @@
-"""Describe-the-vibe Netflix finder: an interactive menu over the ChromaDB collection.
+"""Describe-the-vibe movie finder: an interactive menu over the ChromaDB collection.
 
-Run after load_data.py:  uv run app.py
+Run after load_data.py and load_plots.py:  uv run app.py
 """
 
 import textwrap
@@ -11,6 +11,8 @@ import numpy as np
 
 DB_PATH = "db"
 N_RESULTS = 5
+# Wikipedia plots are split into several chunks, so fetch extra matches and keep the best one per movie
+CANDIDATES = N_RESULTS * 8
 
 client = chromadb.PersistentClient(path=DB_PATH)
 titles = client.get_or_create_collection("titles")
@@ -18,16 +20,40 @@ titles = client.get_or_create_collection("titles")
 watchlist = client.get_or_create_collection("watchlist")
 
 
+def movie_key(id_, meta):
+    # Wikipedia chunks share a movie_id; Netflix rows and user adds are one item per movie
+    return meta.get("movie_id", id_)
+
+
+def top_movies(result, exclude=(), n=N_RESULTS):
+    """Keep the best-matching item per movie from a query result, skipping excluded movies."""
+    rows, seen = [], set(exclude)
+    for id_, meta, doc in zip(result["ids"][0], result["metadatas"][0], result["documents"][0]):
+        key = movie_key(id_, meta)
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append((id_, meta, doc))
+        if len(rows) == n:
+            break
+    return [r[0] for r in rows], [r[1] for r in rows], [r[2] for r in rows]
+
+
 def show_results(ids, metadatas, documents):
     print()
     for i, (meta, doc) in enumerate(zip(metadatas, documents), start=1):
-        print(f"{i}. {meta['title']} ({meta['type']}, {meta['year']}) - {meta['genres']}")
-        print(textwrap.fill(doc, width=80, initial_indent="   ", subsequent_indent="   "))
+        source = meta.get("source", "Netflix")
+        print(f"{i}. {meta['title']} ({meta['type']}, {meta['year']}) [{source}] - {meta['genres']}")
+        passage = textwrap.shorten(doc, width=300, placeholder="...")
+        print(textwrap.fill(passage, width=80, initial_indent="   ", subsequent_indent="   "))
     print()
 
 
 def results_menu(ids, metadatas, documents):
     """Show results and let the user act on them until they go back."""
+    if not ids:
+        print("\nNo matches.")
+        return
     while True:
         show_results(ids, metadatas, documents)
         choice = input("[number] more like this, [w number] add to watchlist, [Enter] back: ").strip().lower()
@@ -59,25 +85,19 @@ def search():
     query = input("\nDescribe what you're in the mood for: ").strip()
     if not query:
         return
-    result = titles.query(query_texts=[query], n_results=N_RESULTS, where=ask_type_filter())
-    results_menu(result["ids"][0], result["metadatas"][0], result["documents"][0])
+    result = titles.query(query_texts=[query], n_results=CANDIDATES, where=ask_type_filter())
+    results_menu(*top_movies(result))
 
 
-def query_by_embedding(embedding, exclude_ids):
-    """Nearest titles to an embedding, skipping the ones in exclude_ids."""
-    result = titles.query(query_embeddings=[embedding], n_results=N_RESULTS + len(exclude_ids))
-    rows = [
-        (id_, meta, doc)
-        for id_, meta, doc in zip(result["ids"][0], result["metadatas"][0], result["documents"][0])
-        if id_ not in exclude_ids
-    ][:N_RESULTS]
-    ids, metadatas, documents = zip(*rows)
-    return list(ids), list(metadatas), list(documents)
+def query_by_embedding(embedding, exclude_movies):
+    """Nearest movies to an embedding, skipping the movie keys in exclude_movies."""
+    result = titles.query(query_embeddings=[embedding], n_results=CANDIDATES + len(exclude_movies))
+    return top_movies(result, exclude=exclude_movies)
 
 
 def more_like_this(title_id):
-    embedding = titles.get(ids=[title_id], include=["embeddings"])["embeddings"][0]
-    return query_by_embedding(embedding, exclude_ids={title_id})
+    item = titles.get(ids=[title_id], include=["embeddings", "metadatas"])
+    return query_by_embedding(item["embeddings"][0], exclude_movies={movie_key(title_id, item["metadatas"][0])})
 
 
 def add_title():
@@ -90,8 +110,9 @@ def add_title():
     kind = "TV Show" if input("Movie or TV show? [m/t]: ").strip().lower() == "t" else "Movie"
     year = input("Release year: ").strip()
     genres = input("Genres (comma separated): ").strip()
+    new_id = f"user-{uuid.uuid4().hex[:8]}"
     titles.upsert(
-        ids=[f"user-{uuid.uuid4().hex[:8]}"],
+        ids=[new_id],
         documents=[description],
         metadatas=[{
             "title": title,
@@ -99,9 +120,11 @@ def add_title():
             "genres": genres,
             "rating": "",
             "year": int(year) if year.isdigit() else 0,
+            "source": "You",
+            "movie_id": new_id,
         }],
     )
-    print(f"Added '{title}'. Collection now has {titles.count()} titles.")
+    print(f"Added '{title}'. Collection now has {titles.count()} items.")
 
 
 def add_to_watchlist(title_id):
@@ -138,7 +161,8 @@ def surprise_me():
     taste = np.mean(items["embeddings"], axis=0)
     names = ", ".join(meta["title"] for meta in items["metadatas"])
     print(f"\nBecause your watchlist has: {names}")
-    results_menu(*query_by_embedding(taste.tolist(), exclude_ids=set(items["ids"])))
+    watched = {movie_key(id_, meta) for id_, meta in zip(items["ids"], items["metadatas"])}
+    results_menu(*query_by_embedding(taste.tolist(), exclude_movies=watched))
 
 
 MENU = {
@@ -150,7 +174,7 @@ MENU = {
 
 
 def main():
-    print(f"Netflix vibe finder - {titles.count()} titles loaded.")
+    print(f"Movie vibe finder - {titles.count()} items loaded (Netflix titles + Wikipedia plot chunks).")
     if titles.count() == 0:
         print("The database is empty. Run 'uv run load_data.py' first.")
         return
