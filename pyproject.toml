@@ -1,0 +1,15 @@
+[project]
+name = "movie-finder"
+version = "0.1.0"
+description = "Find Netflix titles by describing the vibe, using a ChromaDB vector database"
+readme = "README.md"
+authors = [
+    { name = "vkulk", email = "vedaant2910@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "chromadb>=1.5.9",
+    "kagglehub>=1.0.3",
+    "pandas>=3.1.0",
+]
+

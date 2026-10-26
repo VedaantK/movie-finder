@@ -1,0 +1,14 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Dataset (download it yourself, see README) and the local vector database
+data/
+db/
